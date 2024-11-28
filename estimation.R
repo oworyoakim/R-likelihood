@@ -1,0 +1,160 @@
+RNGversion("3.6.0")
+set.seed(123)
+library(xtable)
+
+## ----init-example-----------------------------------------------------------------------------------------------------------------------------------------------
+# Load TMB and optimization packages
+library(TMB)
+library(optimr)
+# Run the C++ file containing the TMB code
+TMB::compile("code/poi_hmm.cpp", "-O1 -g", DLLFLAGS = "") 
+# Load it
+dyn.load(dynlib("code/poi_hmm"))
+# Load the parameter transformation function
+source("functions/utils.R")
+
+
+## ----load-example-----------------------------------------------------------------------------------------------------------------------------------------------
+load("data/fetal-lamb.RData")
+lamb_data <- lamb
+
+
+## ----param-example----------------------------------------------------------------------------------------------------------------------------------------------
+# Model with 2 states
+m <- 2
+TMB_data <- list(x = lamb_data, m = m)
+
+# Generate initial set of parameters for optimization
+lambda <- c(1, 3)
+gamma <- matrix(c(0.8, 0.2,
+                  0.2, 0.8), byrow = TRUE, nrow = m)
+
+
+## ----pn2pw-example----------------------------------------------------------------------------------------------------------------------------------------------
+# Turn them into working parameters
+parameters <- pois.HMM.pn2pw(m, lambda, gamma)
+
+
+## ----madeadfun-example------------------------------------------------------------------------------------------------------------------------------------------
+obj_tmb <- MakeADFun(TMB_data, parameters, DLL = "poi_hmm",
+                     silent = TRUE)
+
+
+## ----optimizing-example-----------------------------------------------------------------------------------------------------------------------------------------
+mod_tmb <- nlminb(start = obj_tmb$par, objective = obj_tmb$fn)
+# Check that it converged successfully
+mod_tmb$convergence == 0
+
+
+## ----summary-sdreport-example-----------------------------------------------------------------------------------------------------------------------------------
+summary(sdreport(obj_tmb), "report")
+
+
+## ----gradient-hessian-example-----------------------------------------------------------------------------------------------------------------------------------
+# The negative log-likelihood is accessed by the objective 
+# attribute of the optimized object
+mod_tmb$objective
+mod_tmb <- nlminb(start = obj_tmb$par, objective = obj_tmb$fn,
+                  gradient = obj_tmb$gr, hessian = obj_tmb$he)
+mod_tmb$objective
+
+
+## ----leroux-likelihood-calculation------------------------------------------------------------------------------------------------------------------------------
+x <- lamb_data
+n <- length(x)
+l <- 0.3583
+- n * l + log(l) * sum(x) - sum(log(factorial(x)))
+
+
+## ----leroux-likelihood------------------------------------------------------------------------------------------------------------------------------------------
+- n * l + log(l) * sum(x)
+
+
+## ----stat.dist--------------------------------------------------------------------------------------------------------------------------------------------------
+# Compute the stationary distribution of a Markov chain
+# with transition probability gamma
+stat.dist <- function(gamma) {
+  m <- dim(gamma)[1]
+  return(solve(t(diag(m) - gamma + 1), rep(1, m)))
+}
+
+
+## ----nested-fix-------------------------------------------------------------------------------------------------------------------------------------------------
+# Get the previous values, and fix some
+fixed_par_lambda <- lambda
+fixed_par_lambda[1] <- 1
+fixed_par_gamma <- gamma
+
+
+## ----nested-pn2pw-----------------------------------------------------------------------------------------------------------------------------------------------
+# Transform them into working parameters
+new_parameters <- pois.HMM.pn2pw(m = m,
+                                 lambda = fixed_par_lambda,
+                                 gamma = fixed_par_gamma)
+
+
+## ----nested-estimation------------------------------------------------------------------------------------------------------------------------------------------
+map <- list(tlambda = as.factor(c(NA, 1)),
+            tgamma = as.factor(c(2, 3)))
+
+# The map is fed to the MakeADFun function
+fixed_par_obj_tmb <- MakeADFun(TMB_data, new_parameters,
+                               DLL = "poi_hmm",
+                               silent = TRUE,
+                               map = map)
+fixed_par_mod_tmb <- nlminb(start = fixed_par_obj_tmb$par,
+                            objective = fixed_par_obj_tmb$fn,
+                            gradient = fixed_par_obj_tmb$gr,
+                            hessian = fixed_par_obj_tmb$he)
+
+
+## ----estimates-nested-model, results = 'asis', echo = FALSE-----------------------------------------------------------------------------------------------------
+adrep1 <- summary(sdreport(obj_tmb), "report")
+row_names_latex <- paste0(rep("$\\lambda_{", m), 1:m, "}$")
+for (gamma_idx in 1:m ^ 2) {
+  row_col_idx <- matrix.col.idx.to.rowcol(gamma_idx, m)
+  row_names_latex <- c(row_names_latex,
+                       paste0("$\\gamma_{", toString(row_col_idx), "}$"))
+}
+row_names_latex <- c(row_names_latex,
+                     paste0(rep("$\\delta_{", m), 1:m, "}$"))
+
+mat1 <- matrix(adrep1, ncol = 2,
+               dimnames = list(row_names_latex, colnames(adrep1)))
+
+adrep2 <- summary(sdreport(fixed_par_obj_tmb), "report")
+mat2 <- matrix(adrep2, ncol = 2,
+               dimnames = list(row_names_latex, colnames(adrep2)))
+
+addtorow <- list()
+addtorow$pos <- list(- 1)
+addtorow$command <- paste0(paste0('& \\multicolumn{2}{c}{', c('Original model', 'Nested model'), '}',
+                                  collapse=''),
+                           '\\\\')
+
+mat3 <- cbind(mat1, mat2)
+table <- xtable(mat3,
+                caption = "2 state Poisson HMM before and after fixing $\\lambda_1$ to 1 using a nested model",
+                label = "table:nested-model")
+print(table,
+      sanitize.rownames.function = identity,
+      add.to.row = addtorow)
+
+
+## ----decay-likelihood-------------------------------------------------------------------------------------------------------------------------------------------
+# Original model negative log-likelihood
+mod_tmb$objective
+#Nested model negative log-likelihood
+fixed_par_mod_tmb$objective
+
+
+## ----1-diff-1---------------------------------------------------------------------------------------------------------------------------------------------------
+adrep <- summary(sdreport(obj_tmb), "report")
+estimate_delta <- adrep[rownames(adrep) == "delta", "Estimate"]
+sum(estimate_delta)
+sum(estimate_delta) == 1
+
+
+## ----0-diff-0---------------------------------------------------------------------------------------------------------------------------------------------------
+1e-100 == 0
+(1 + 1e-100) == 1

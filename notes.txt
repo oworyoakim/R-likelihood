@@ -1,0 +1,32 @@
+- pdfexpert
+- explain everything
+- Writing something about 	
+- goodnotes 5
+
+
+
+Funksjoner:
+
+- CreateSpec()
+
+class() = "MSINGARCH"
+
+- FitML(spec = CreateSpec(), data = vector(), ctr = list(nlminb stuff))
+class() = "MSINGARCH_FIT"
+
+- simulate.MSINGARCH
+- simulate.MSINGARCH_fit
+- class = MSINGARCH_SIM
+
+- decode.MSINGARCH_FIT
+- class = "MSINGARCH_DECODE"
+
+
+
+plot.MSINGARCH_FIT
+plot.MSINGARCH_SIM
+plot.MSINGARCH_DECODE
+
+summary.MSINGARCH
+summary.MSINGARCH_FIT
+

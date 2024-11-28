@@ -1,0 +1,115 @@
+---
+title: "MSIngarch"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Thisis just a preliminary intro to using the functions for creating, simulating and fitting MS-INGARCH models. 
+
+All functions are gathered in the utils.R folder:
+```{r utils, message=F}
+source("utils.R")
+
+```
+
+
+## Creating a MSingarch specification
+
+All functions requires a "MSingarch" specification. You need to choose the number regimes (m), the parameters (par) and the mean specification (mean_spec). The last one can be both "linear" and "log-linear".
+
+Lets create a 2-regime linear and log-linear model:
+
+```{r}
+
+modela <- MSingarch(m = 2, 
+                       par = list(a = c(0.2, 0.3),
+                                 b = c(0.3, 0.5),
+                                 d = c(3, 4),
+                                 gamma = matrix(c(0.95, 0.05,0.05, 0.95),nrow = 2)),
+                      mean_spec = "linear")
+
+modelb <- MSingarch(m = 2, 
+                       par = list(a = c(0.2, 0.4),
+                                 b = c(0.3, 0.4),
+                                 d = c(1, 0.6),
+                                 gamma = matrix(c(0.95, 0.05,0.05, 0.95),nrow = 2)),
+                      mean_spec = "log-linear")
+
+
+```
+
+## Simulation
+To simulate you can use the \texttt{rMSingarch} function. You need to supply the sample size and the model you want to simulate from. Some options for initiation of mean process are available through the init_mean argument: 
+
+
+```{r, sim}
+set.seed(1)
+sima <- rMSingarch(n = 1000, model = modela)
+simb <- rMSingarch(n = 1000, model = modelb)
+```
+
+You can plot the simulated time series along with the true underlying intensity (in red) and the true underlying regime using plot():
+
+```{r pa, warning=F}
+plot(sima)
+```
+
+```{r pb, warning=F}
+plot(simb)
+```
+
+
+## Estimating a model
+The likelihood for the linear and log-linear model is coded up seperately (different constraints on parameters). It might be necessary to compile them once on your one computer (just uncomment the commented stuff below). Then load them. 
+
+
+
+```{r}
+library(TMB)
+# compile("msingarch_linear.cpp") 
+# compile("msingarch_log_linear.cpp")
+dyn.load(dynlib("msingarch_linear"))
+dyn.load(dynlib("msingarch_log_linear"))
+
+```
+
+
+The likelihoods are wrapped in the function fitMSingarch, which needes datainput, modelinput, initial parameter values (init_par), and also initial values for the mean process (init_mean). 
+
+```{r, fita}
+fita <- fitMSingarch(data = sima$y,
+                     model = modela, 
+                     init_par = modela$par,
+                     init_mean = sima$init_mean)
+fita
+
+
+```
+
+
+The function also aposteriori computes smoothing probabilities, i.e. the most probable regime and at time t, and an in-sample prediction. The the object can also be plotted:
+
+
+```{r, plota}
+plot(fita)
+```
+
+Similar for the log-linear model:
+
+```{r, fitb}
+fitb <- fitMSingarch(data = simb$y,
+                     model = modelb, 
+                     init_par = modelb$par,
+                     init_mean = simb$init_mean)
+fitb
+
+
+```
+
+```{r, plotb}
+plot(fitb)
+```
+
+

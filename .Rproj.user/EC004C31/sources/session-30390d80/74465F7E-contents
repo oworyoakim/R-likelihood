@@ -1,0 +1,129 @@
+
+#
+# SALMON LICE DATA
+#
+
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(rjson)
+
+load("licedata.Rdata")
+
+locations <- 
+  fromJSON(file = "metadata_BW_sites.json") %>% 
+  do.call(rbind.data.frame, .) %>% 
+  tibble %>% 
+  rename(location = localityNo)
+
+licedata <- licedata %>%
+  mutate(year = year(date), week = isoweek(date))
+
+# The most active locations
+active_locations <-
+  licedata %>%
+  group_by(location) %>%
+  summarize(n_active = sum(active_status)) %>%
+  arrange(desc(n_active)) %>% 
+  head(n = 25)
+
+# Plot the activity in the most active locations
+licedata %>% 
+  group_by(location) %>% 
+  mutate(max_lice = max(lice_AF)) %>% 
+  ungroup() %>% 
+  mutate(action_mechanical = max_lice*action_mechanical) %>% 
+  mutate(action_mechanical = recode(.$action_mechanical, 
+                                    `0` = NA_real_)) %>% 
+  mutate(action_medical_bath = max_lice*action_medical_bath) %>% 
+  mutate(action_medical_bath = recode(.$action_medical_bath, 
+                                    `0` = NA_real_)) %>% 
+  mutate(action_medical_food = max_lice*action_medical_food) %>% 
+  mutate(action_medical_food = recode(.$action_medical_food, 
+                                      `0` = NA_real_)) %>% 
+  filter(location %in% active_locations$location) %>% 
+  ggplot +
+  geom_rect(aes(xmin = date-3.8, 
+                xmax = date+3.8, 
+                ymin = -Inf, 
+                ymax = Inf,
+                fill = as.factor(active_status)),
+            alpha = .1) +
+  geom_line(aes(x = date, y = lice_AF)) +
+  geom_point(aes(x = date, y = action_mechanical), colour = "red", alpha = .6) +
+  geom_point(aes(x = date, y = action_medical_bath), colour = "darkblue", alpha = .6) +
+  geom_point(aes(x = date, y = action_medical_food), colour = "forestgreen", alpha = .6) +
+  facet_wrap(~ location, scales = "free_y") +
+  labs(fill = "Active") +
+  scale_fill_manual(values = c("red", "white")) +
+  theme_bw()
+  
+
+# The probability of treatment the week after some observed number of lice
+
+lag_n <- 1
+
+licedata %>% 
+  select(location, lice_AF, starts_with("action")) %>% 
+  mutate(lice_AF = round(lice_AF)) %>% 
+  mutate(action = (
+    action_medical_bath == 1) | 
+      (action_medical_food == 1) |
+      (action_mechanical == 1)) %>% 
+  group_by(location) %>% 
+  mutate(lagged_action = lag(action, n = lag_n)) %>% 
+  ungroup %>% 
+  group_by(lice_AF) %>% 
+  summarise(n = n(),
+            action = sum(lagged_action, na.rm = TRUE)) %>% 
+  mutate(frac = action/n) %>% 
+  ggplot(aes(x = lice_AF, y = frac)) +
+  geom_line() +
+  xlim(c(0, 100)) +
+  theme_bw() +
+  ylab("Probability of action in lagged week") +
+  xlab("Number of lice")
+
+# Look at individual locations
+# 15236
+
+licedata %>% 
+  filter(location == 15236) %>% 
+  #filter(location == 12383) %>% 
+  #filter(location == 24535) %>% 
+  #filter(location == 13035) %>% 
+  #filter(location == 13284) %>% 
+  group_by(location) %>% 
+  mutate(max_lice = max(lice_AF)) %>% 
+  ungroup() %>% 
+  mutate(action_mechanical = lice_AF*action_mechanical) %>% 
+  mutate(action_mechanical = recode(.$action_mechanical, 
+                                    `0` = NA_real_)) %>% 
+  mutate(action_medical_bath = lice_AF*action_medical_bath) %>% 
+  mutate(action_medical_bath = recode(.$action_medical_bath, 
+                                      `0` = NA_real_)) %>% 
+  mutate(action_medical_food = lice_AF*action_medical_food) %>% 
+  mutate(action_medical_food = recode(.$action_medical_food, 
+                                      `0` = NA_real_)) %>% 
+  filter(location %in% active_locations$location) %>% 
+  ggplot +
+  geom_rect(aes(xmin = date-3.5, 
+                xmax = date+3.5, 
+                ymin = -Inf, 
+                ymax = Inf,
+                fill = as.factor(active_status)),
+            alpha = .3) +
+  geom_line(aes(x = date, y = lice_AF)) +
+  geom_point(aes(x = date, y = action_mechanical), 
+             colour = "red", alpha = .6, size = 3) +
+  geom_point(aes(x = date, y = action_medical_bath), 
+             colour = "darkblue", alpha = .6, size = 3) +
+  geom_point(aes(x = date, y = action_medical_food), 
+             colour = "forestgreen", alpha = .6, size = 3) +
+  facet_wrap(~ location, scales = "free_y") +
+  labs(fill = "Active") +
+  scale_fill_manual(values = c("red", "white")) +
+  theme_bw()
+
+
