@@ -3,7 +3,7 @@
 library(TMB)
 source("utils.R")
 
-#TMB::compile("msingarch_linear.cpp", "-O1 -g", DLLFLAGS = "") 
+TMB::compile("msingarch_linear.cpp", "-O1 -g", DLLFLAGS = "") 
 TMB::dynlib("msingarch_linear")
 
 #TMB::compile("msingarch_log_linear.cpp", "-O1 -g", DLLFLAGS = "") 
@@ -30,7 +30,7 @@ modelb <- MSingarch(m = 2,
 # Simulate a sample
 n <- 500
 set.seed(1)
-sima <- rMSingarch(n = n, model = modela)
+sima <- rMSingarch(n = n, model = modela);sima$y
 simb <- rMSingarch(n = n, model = modelb)
 
 # Estimate data

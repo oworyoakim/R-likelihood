@@ -7,11 +7,11 @@ library(xtable)
 library(TMB)
 library(optimr)
 # Run the C++ file containing the TMB code
-#TMB::compile("msingarch_linear.cpp", "-O1 -g", DLLFLAGS = "") 
+TMB::compile("code/poi_hmm.cpp", "-O1 -g", DLLFLAGS = "") 
 # Load it
-TMB::dynlib("msingarch_linear")
+dyn.load(dynlib("code/poi_hmm"))
 # Load the parameter transformation function
-source("utils.R")
+source("functions/utils.R")
 
 
 ## ----load-example-----------------------------------------------------------------------------------------------------------------------------------------------
